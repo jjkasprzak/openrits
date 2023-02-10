@@ -37,14 +37,14 @@ class PropertyValue(models.Model):
 
     def deserialize(self) -> any:
         """
-        Deserializes value using type returned by getProperty
+        Deserializes value using type returned by getProperty.
         """
         property_type = self.getPropertyType()
         return PropertyValue.TYPE_DICT[property_type]().to_python(self.value)
 
     def serialize(self, object: any):
         """
-        Serializes object and writes it to the value
+        Serializes object and writes it to the value.
         """
         self.value = str(object)
 
@@ -54,7 +54,7 @@ class PropertyValue(models.Model):
 
 class ItemCategory(models.Model):
     name = models.CharField(max_length=127)
-    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True)
     lineage = models.TextField(
         editable=False,
         default=",",
@@ -64,9 +64,15 @@ class ItemCategory(models.Model):
     )
 
     def get_descendants(self):
+        """
+        Return all subcategories.
+        """
         return ItemCategory.objects.filter(lineage__contains=f",{self.pk},")
 
     def get_ancestors(self):
+        """
+        Return all supercategories.
+        """
         qs = ItemCategory.objects.none()
         if self.lineage != ",":
             for cat_id in self.lineage[1:-1].split(","):
@@ -74,6 +80,10 @@ class ItemCategory(models.Model):
         return qs
 
     def get_properties(self):
+        """
+        Return all ItemCategoryProperties
+        for this category and all supercategories.
+        """
         qs = ItemCategoryProperty.objects.none()
         for ancestor in self.get_ancestors():
             qs = qs.union(ancestor.itemcategoryproperty_set.all())
@@ -81,6 +91,10 @@ class ItemCategory(models.Model):
         return qs
 
     def update_parent(self, new_parent):
+        """
+        Update parent category and adjust
+        all subcategories accordingly.
+        """
         new_lineage = ","
         new_parent_id = None
         if new_parent is not None:
