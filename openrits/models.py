@@ -1,4 +1,7 @@
 from django.db import models
+from django.core.validators import RegexValidator
+from django.db.models.functions import Substr, StrIndex, Concat
+from django.db.models import Value as V
 
 
 class PropertyDefinition(models.Model):
@@ -52,6 +55,34 @@ class PropertyValue(models.Model):
 class ItemCategory(models.Model):
     name = models.CharField(max_length=127)
     parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True)
+    lineage = models.TextField(
+        editable=False,
+        default=",",
+        validators=[
+            RegexValidator(regex=r"^,(?:\d+,)*\Z", message="Incorrect lineage format")
+        ],
+    )
+
+    def get_descendants(self):
+        return ItemCategory.objects.filter(lineage__contains=f",{self.pk},")
+
+    def update_parent(self, new_parent):
+        new_lineage = ","
+        new_parent_id = None
+        if new_parent is not None:
+            new_lineage = new_parent.lineage + f"{new_parent.pk},"
+            new_parent_id = new_parent.pk
+        ItemCategory.objects.filter(pk=self.pk).update(
+            parent=new_parent_id, lineage=new_lineage
+        )
+        descendantsLineage = new_lineage + f"{self.pk},"
+        searchStr = f",{self.pk},"
+        self.get_descendants().update(
+            lineage=Concat(
+                V(descendantsLineage),
+                Substr("lineage", StrIndex("lineage", V(searchStr)) + len(searchStr)),
+            )
+        )
 
 
 class ItemCategoryProperty(PropertyDefinition):
