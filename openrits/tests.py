@@ -101,11 +101,17 @@ class ItemCategory_ModelTests(TestCase):
         descendants = ItemCategory.objects.get(name="A").get_descendants()
 
         names = set(name for (name,) in descendants.values_list("name"))
-        expected = {"A_1", "A_2", "A_1_1", "A_1_1_1"}
+        expected = set(["A_1", "A_2", "A_1_1", "A_1_1_1"])
 
-        self.assertTrue(
-            names == expected, f"Expected {expected}, but got {descendants}"
-        )
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
+
+    def test_get_descendants_no_descendants(self):
+        descendants = ItemCategory.objects.get(name="B").get_descendants()
+
+        names = set(name for (name,) in descendants.values_list("name"))
+        expected = set()
+
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
 
     def test_update_parent_to_other(self):
         b = ItemCategory.objects.get(name="B")
@@ -145,3 +151,40 @@ class ItemCategory_ModelTests(TestCase):
             )
             expected_parent = cat.pk
             expected_lineage += f"{cat.pk},"
+
+    def test_get_ancestors(self):
+        ancestors = ItemCategory.objects.get(name="A_1_1").get_ancestors()
+
+        names = list(ancestor.name for ancestor in ancestors)
+        expected = ["A", "A_1"]
+
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
+
+    def test_get_ancestors_no_ancestors(self):
+        ancestors = ItemCategory.objects.get(name="B").get_ancestors()
+
+        names = list(ancestor.name for ancestor in ancestors)
+        expected = []
+
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
+
+    def test_get_properties(self):
+        for cat in ItemCategory.objects.all():
+            ItemCategoryProperty.objects.create(
+                name=cat.name + "_prop", property_type="IntegerField", category=cat
+            )
+
+        properties = ItemCategory.objects.get(name="A_1_1").get_properties()
+
+        names = list(prop.name for prop in properties)
+        expected = ["A_prop", "A_1_prop", "A_1_1_prop"]
+
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
+
+    def test_get_properties_no_properties(self):
+        properties = ItemCategory.objects.get(name="A_1_1").get_properties()
+
+        names = list(prop.name for prop in properties)
+        expected = []
+
+        self.assertEqual(names, expected, f"Expected {expected}, but got {names}")

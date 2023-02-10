@@ -66,6 +66,20 @@ class ItemCategory(models.Model):
     def get_descendants(self):
         return ItemCategory.objects.filter(lineage__contains=f",{self.pk},")
 
+    def get_ancestors(self):
+        qs = ItemCategory.objects.none()
+        if self.lineage != ",":
+            for cat_id in self.lineage[1:-1].split(","):
+                qs = qs.union(ItemCategory.objects.filter(pk=int(cat_id)))
+        return qs
+
+    def get_properties(self):
+        qs = ItemCategoryProperty.objects.none()
+        for ancestor in self.get_ancestors():
+            qs = qs.union(ancestor.itemcategoryproperty_set.all())
+        qs = qs.union(self.itemcategoryproperty_set.all())
+        return qs
+
     def update_parent(self, new_parent):
         new_lineage = ","
         new_parent_id = None
