@@ -12,13 +12,32 @@ import datetime
 
 class ItemPropertyValue_ModelTests(TestCase):
     def setUp(self):
-        category = ItemCategory.objects.create(name="A")
-        item = Item.objects.create(name="thing", category=category)
+        a = ItemCategory.objects.create(name="A")
+        a_1 = ItemCategory.objects.create(name="A_1", parent=a, lineage=f",{a.pk},")
+        a_1_1 = ItemCategory.objects.create(
+            name="A_1_1", parent=a_1, lineage=f"{a_1.lineage}{a_1.pk},"
+        )
+        ItemCategory.objects.create(name="B")
+
+        a_thing = Item.objects.create(name="a_thing", category=a)
+        a_1_thing = Item.objects.create(name="a_1_thing", category=a_1)
+
+        for cat in (a, a_1, a_1_1):
+            prop_def = ItemCategoryProperty.objects.create(
+                name=cat.name + "_prop", property_type="IntegerField", category=cat
+            )
+            ItemPropertyValue.objects.create(value="1", item=a_thing, property=prop_def)
+            ItemPropertyValue.objects.create(
+                value="2", item=a_1_thing, property=prop_def
+            )
+
+        cat_b = ItemCategory.objects.create(name="B")
+        b_thing = Item.objects.create(name="b_thing", category=cat_b)
         for field in PropertyDefinition.SUPPORTED_FIELDS:
             prop = ItemCategoryProperty.objects.create(
-                name=field.__name__, property_type=field.__name__, category=category
+                name=field.__name__, property_type=field.__name__, category=cat_b
             )
-            ItemPropertyValue.objects.create(item=item, property=prop)
+            ItemPropertyValue.objects.create(item=b_thing, property=prop)
 
     SERIALIZATION_CASES = [
         ("IntegerField", "1", 1),
@@ -79,6 +98,24 @@ class ItemPropertyValue_ModelTests(TestCase):
             f"Some of supported fields were omitted {fields_to_check}",
         )
 
+    def test_get_defined_for(self):
+        thing1 = Item.objects.get(name="a_1_thing")
+
+        thing1_values = ItemPropertyValue.objects.get_defined_for(thing1)
+        result = list((v.property.name, v.value) for v in thing1_values)
+        expected = [("A_prop", "2"), ("A_1_prop", "2")]
+
+        self.assertEqual(result, expected, f"Expected {expected}, but got {result}")
+
+    def test_get_undefined_for(self):
+        thing1 = Item.objects.get(name="a_1_thing")
+
+        thing1_values = ItemPropertyValue.objects.get_undefined_for(thing1)
+        result = list((v.property.name, v.value) for v in thing1_values)
+        expected = [("A_1_1_prop", "2")]
+
+        self.assertEqual(result, expected, f"Expected {expected}, but got {result}")
+
 
 class ItemCategory_ModelTests(TestCase):
     def setUp(self):
@@ -100,7 +137,7 @@ class ItemCategory_ModelTests(TestCase):
     def test_get_descendants(self):
         descendants = ItemCategory.objects.get(name="A").get_descendants()
 
-        names = set(name for (name,) in descendants.values_list("name"))
+        names = set(d.name for d in descendants)
         expected = set(["A_1", "A_2", "A_1_1", "A_1_1_1"])
 
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
@@ -108,7 +145,7 @@ class ItemCategory_ModelTests(TestCase):
     def test_get_descendants_no_descendants(self):
         descendants = ItemCategory.objects.get(name="B").get_descendants()
 
-        names = set(name for (name,) in descendants.values_list("name"))
+        names = set(d.name for d in descendants)
         expected = set()
 
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")

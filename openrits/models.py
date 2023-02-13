@@ -1,7 +1,9 @@
 from django.db import models
 from django.core.validators import RegexValidator
-from django.db.models.functions import Substr, StrIndex, Concat
-from django.db.models import Value as V
+from django.db.models.functions import Substr, StrIndex, Concat, Chr
+from django.db.models.query import QuerySet
+from django.db.models import Value as V, F
+import datetime
 
 
 class PropertyDefinition(models.Model):
@@ -73,22 +75,24 @@ class ItemCategory(models.Model):
         """
         Return all supercategories.
         """
-        qs = ItemCategory.objects.none()
-        if self.lineage != ",":
-            for cat_id in self.lineage[1:-1].split(","):
-                qs = qs.union(ItemCategory.objects.filter(pk=int(cat_id)))
-        return qs
+        return ItemCategory.objects.alias(
+            chrpk=Concat(V(","), "id", V(","), output_field=models.CharField()),
+            ancestors=V(self.lineage),
+        ).filter(ancestors__contains=F("chrpk"))
 
     def get_properties(self):
         """
         Return all ItemCategoryProperties
         for this category and all supercategories.
         """
-        qs = ItemCategoryProperty.objects.none()
-        for ancestor in self.get_ancestors():
-            qs = qs.union(ancestor.itemcategoryproperty_set.all())
-        qs = qs.union(self.itemcategoryproperty_set.all())
-        return qs
+        return ItemCategoryProperty.objects.alias(
+            chrpk=Concat(
+                V(","), "category_id", V(","), output_field=models.CharField()
+            ),
+            categories=Concat(
+                V(self.lineage), V(self.pk), V(","), output_field=models.CharField()
+            ),
+        ).filter(categories__contains=F("chrpk"))
 
     def update_parent(self, new_parent):
         """
@@ -129,6 +133,17 @@ class Item(models.Model):
 class ItemPropertyValue(PropertyValue):
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
     property = models.ForeignKey(ItemCategoryProperty, on_delete=models.CASCADE)
+
+    class Manager(models.Manager):
+        def get_defined_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+            defined_properties = item.category.get_properties().only("id")
+            return self.filter(item=item).filter(property__in=defined_properties)
+
+        def get_undefined_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+            defined_properties = item.category.get_properties().only("id")
+            return self.filter(item=item).exclude(property__in=defined_properties)
+
+    objects = Manager()
 
     def getPropertyType(self) -> str:
         return self.property.property_type
