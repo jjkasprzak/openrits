@@ -65,20 +65,50 @@ class ItemCategory(models.Model):
         ],
     )
 
-    def get_descendants(self):
-        """
-        Return all subcategories.
-        """
-        return ItemCategory.objects.filter(lineage__contains=f",{self.pk},")
+    class Manager(models.Manager):
+        def get_descendants(self, category: "ItemCategory") -> "QuerySet[ItemCategory]":
+            """
+            Return all subcategories for given category.
+            """
+            return self.filter(lineage__contains=f",{category.pk},")
 
-    def get_ancestors(self):
-        """
-        Return all supercategories.
-        """
-        return ItemCategory.objects.alias(
-            chrpk=Concat(V(","), "id", V(","), output_field=models.CharField()),
-            ancestors=V(self.lineage),
-        ).filter(ancestors__contains=F("chrpk"))
+        def get_ancestors(self, category: "ItemCategory") -> "QuerySet[ItemCategory]":
+            """
+            Return all supercategories for given category.
+            """
+            return self.alias(
+                chrpk=Concat(V(","), F("id"), V(","), output_field=models.CharField()),
+                ancestors=V(category.lineage),
+            ).filter(ancestors__contains=F("chrpk"))
+
+        def update_parent(
+            self, category: "ItemCategory", new_parent: "ItemCategory"
+        ) -> None:
+            """
+            Update parent category and adjust
+            all subcategories accordingly.
+            """
+            new_lineage = ","
+            new_parent_id = None
+            if new_parent is not None:
+                new_lineage = new_parent.lineage + f"{new_parent.pk},"
+                new_parent_id = new_parent.pk
+            self.filter(pk=category.pk).update(
+                parent=new_parent_id, lineage=new_lineage
+            )
+            descendantsLineage = new_lineage + f"{category.pk},"
+            searchStr = f",{category.pk},"
+            self.get_descendants(category).update(
+                lineage=Concat(
+                    V(descendantsLineage),
+                    Substr(
+                        F("lineage"),
+                        StrIndex(F("lineage"), V(searchStr)) + len(searchStr),
+                    ),
+                )
+            )
+
+    objects = Manager()
 
     def get_properties(self):
         """
@@ -93,28 +123,6 @@ class ItemCategory(models.Model):
                 V(self.lineage), V(self.pk), V(","), output_field=models.CharField()
             ),
         ).filter(categories__contains=F("chrpk"))
-
-    def update_parent(self, new_parent):
-        """
-        Update parent category and adjust
-        all subcategories accordingly.
-        """
-        new_lineage = ","
-        new_parent_id = None
-        if new_parent is not None:
-            new_lineage = new_parent.lineage + f"{new_parent.pk},"
-            new_parent_id = new_parent.pk
-        ItemCategory.objects.filter(pk=self.pk).update(
-            parent=new_parent_id, lineage=new_lineage
-        )
-        descendantsLineage = new_lineage + f"{self.pk},"
-        searchStr = f",{self.pk},"
-        self.get_descendants().update(
-            lineage=Concat(
-                V(descendantsLineage),
-                Substr("lineage", StrIndex("lineage", V(searchStr)) + len(searchStr)),
-            )
-        )
 
 
 class ItemCategoryProperty(PropertyDefinition):

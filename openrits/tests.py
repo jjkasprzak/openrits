@@ -134,7 +134,8 @@ class ItemCategory_ModelTests(TestCase):
         ItemCategory.objects.create(name="B")
 
     def test_get_descendants(self):
-        descendants = ItemCategory.objects.get(name="A").get_descendants()
+        cat_a = ItemCategory.objects.get(name="A")
+        descendants = ItemCategory.objects.get_descendants(cat_a)
 
         names = set(d.name for d in descendants)
         expected = set(["A_1", "A_2", "A_1_1", "A_1_1_1"])
@@ -142,7 +143,8 @@ class ItemCategory_ModelTests(TestCase):
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
 
     def test_get_descendants_no_descendants(self):
-        descendants = ItemCategory.objects.get(name="B").get_descendants()
+        cat_b = ItemCategory.objects.get(name="B")
+        descendants = ItemCategory.objects.get_descendants(cat_b)
 
         names = set(d.name for d in descendants)
         expected = set()
@@ -154,7 +156,7 @@ class ItemCategory_ModelTests(TestCase):
         a_1 = ItemCategory.objects.get(name="A_1")
         a_1_1 = ItemCategory.objects.get(name="A_1_1")
         a_1_2 = ItemCategory.objects.get(name="A_1_1_1")
-        a_1.update_parent(b)
+        ItemCategory.objects.update_parent(a_1, b)
 
         expected_parent = b.pk
         expected_lineage = f",{b.pk},"
@@ -173,7 +175,7 @@ class ItemCategory_ModelTests(TestCase):
         a_1 = ItemCategory.objects.get(name="A_1")
         a_1_1 = ItemCategory.objects.get(name="A_1_1")
         a_1_1_1 = ItemCategory.objects.get(name="A_1_1_1")
-        a_1.update_parent(None)
+        ItemCategory.objects.update_parent(a_1, None)
 
         expected_parent = None
         expected_lineage = f","
@@ -189,7 +191,8 @@ class ItemCategory_ModelTests(TestCase):
             expected_lineage += f"{cat.pk},"
 
     def test_get_ancestors(self):
-        ancestors = ItemCategory.objects.get(name="A_1_1").get_ancestors()
+        a_1_1 = ItemCategory.objects.get(name="A_1_1")
+        ancestors = ItemCategory.objects.get_ancestors(a_1_1)
 
         names = list(ancestor.name for ancestor in ancestors)
         expected = ["A", "A_1"]
@@ -197,7 +200,8 @@ class ItemCategory_ModelTests(TestCase):
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
 
     def test_get_ancestors_no_ancestors(self):
-        ancestors = ItemCategory.objects.get(name="B").get_ancestors()
+        b = ItemCategory.objects.get(name="B")
+        ancestors = ItemCategory.objects.get_ancestors(b)
 
         names = list(ancestor.name for ancestor in ancestors)
         expected = []
