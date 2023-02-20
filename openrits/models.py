@@ -6,13 +6,6 @@ from django.db.models import Value as V, F
 import datetime
 
 
-def base_manager(class_name: str) -> type:
-    """
-    Returns base manager type for a given class name.
-    """
-    return models.manager.BaseManager.from_queryset(QuerySet, class_name)
-
-
 class PropertyDefinition(models.Model):
     SUPPORTED_FIELDS = (
         models.IntegerField,
@@ -73,13 +66,17 @@ class ItemCategory(models.Model):
     )
 
     class Manager(models.Manager):
-        def get_descendants(self, category: "ItemCategory") -> "QuerySet[ItemCategory]":
+        def filter_descendants(
+            self, category: "ItemCategory"
+        ) -> "QuerySet[ItemCategory]":
             """
             Return all subcategories for given category.
             """
             return self.filter(lineage__contains=f",{category.pk},")
 
-        def get_ancestors(self, category: "ItemCategory") -> "QuerySet[ItemCategory]":
+        def filter_ancestors(
+            self, category: "ItemCategory"
+        ) -> "QuerySet[ItemCategory]":
             """
             Return all supercategories for given category.
             """
@@ -100,12 +97,15 @@ class ItemCategory(models.Model):
             if new_parent is not None:
                 new_lineage = new_parent.lineage + f"{new_parent.pk},"
                 new_parent_id = new_parent.pk
+                check_qs = self.filter_descendants(category).filter(pk=new_parent_id)
+                if check_qs:
+                    raise ValueError("New category parent must not be its descendant.")
             self.filter(pk=category.pk).update(
                 parent=new_parent_id, lineage=new_lineage
             )
             descendantsLineage = new_lineage + f"{category.pk},"
             searchStr = f",{category.pk},"
-            self.get_descendants(category).update(
+            self.filter_descendants(category).update(
                 lineage=Concat(
                     V(descendantsLineage),
                     Substr(
@@ -121,7 +121,7 @@ class ItemCategory(models.Model):
 class ItemCategoryProperty(PropertyDefinition):
     category = models.ForeignKey(ItemCategory, on_delete=models.CASCADE)
 
-    class Manager(base_manager("ItemCategoryProperty")):
+    class Manager(models.Manager):
         def filter_relevant_for(
             self, category: ItemCategory
         ) -> "QuerySet[ItemCategoryProperty]":
