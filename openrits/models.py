@@ -6,6 +6,13 @@ from django.db.models import Value as V, F
 import datetime
 
 
+def base_manager(class_name: str) -> type:
+    """
+    Returns base manager type for a given class name.
+    """
+    return models.manager.BaseManager.from_queryset(QuerySet, class_name)
+
+
 class PropertyDefinition(models.Model):
     SUPPORTED_FIELDS = (
         models.IntegerField,
@@ -110,23 +117,30 @@ class ItemCategory(models.Model):
 
     objects = Manager()
 
-    def get_properties(self):
-        """
-        Return all ItemCategoryProperties
-        for this category and all supercategories.
-        """
-        return ItemCategoryProperty.objects.alias(
-            chrpk=Concat(
-                V(","), "category_id", V(","), output_field=models.CharField()
-            ),
-            categories=Concat(
-                V(self.lineage), V(self.pk), V(","), output_field=models.CharField()
-            ),
-        ).filter(categories__contains=F("chrpk"))
-
 
 class ItemCategoryProperty(PropertyDefinition):
     category = models.ForeignKey(ItemCategory, on_delete=models.CASCADE)
+
+    class Manager(base_manager("ItemCategoryProperty")):
+        def filter_relevant_for(
+            self, category: ItemCategory
+        ) -> "QuerySet[ItemCategoryProperty]":
+            """
+            Return ItemCategoryProperties for given category and all supercategories.
+            """
+            return self.alias(
+                chrpk=Concat(
+                    V(","), "category_id", V(","), output_field=models.CharField()
+                ),
+                categories=Concat(
+                    V(category.lineage),
+                    V(category.pk),
+                    V(","),
+                    output_field=models.CharField(),
+                ),
+            ).filter(categories__contains=F("chrpk"))
+
+    objects = Manager()
 
 
 class Item(models.Model):
@@ -147,7 +161,9 @@ class ItemPropertyValue(PropertyValue):
             """
             Return values for given item and its property definitions.
             """
-            defined_properties = item.category.get_properties().only("id")
+            defined_properties = ItemCategoryProperty.objects.filter_relevant_for(
+                item.category
+            ).only("id")
             return self.filter(item=item).filter(property__in=defined_properties)
 
         def get_obsolete_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
@@ -155,7 +171,9 @@ class ItemPropertyValue(PropertyValue):
             Return values for given item that are not related to
             any of item current property definitions.
             """
-            defined_properties = item.category.get_properties().only("id")
+            defined_properties = ItemCategoryProperty.objects.filter_relevant_for(
+                item.category
+            ).only("id")
             return self.filter(item=item).exclude(property__in=defined_properties)
 
     objects = Manager()

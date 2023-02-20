@@ -208,21 +208,40 @@ class ItemCategory_ModelTests(TestCase):
 
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
 
-    def test_get_properties(self):
+
+class ItemCategoryProperty_ModelTests(TestCase):
+    def setUp(self):
+        cat_a = ItemCategory.objects.create(name="A")
+        cat_a_1 = ItemCategory.objects.create(
+            name="A_1", parent=cat_a, lineage=f",{cat_a.pk},"
+        )
+        cat_a_1_1 = ItemCategory.objects.create(
+            name="A_1_1", parent=cat_a_1, lineage=f"{cat_a_1.lineage}{cat_a_1.pk},"
+        )
+        ItemCategory.objects.create(
+            name="A_1_1_1",
+            parent=cat_a_1_1,
+            lineage=f"{cat_a_1_1.lineage}{cat_a_1_1.pk},",
+        )
+        ItemCategory.objects.create(name="A_2", parent=cat_a, lineage=f",{cat_a.pk},")
         for cat in ItemCategory.objects.all():
             ItemCategoryProperty.objects.create(
                 name=cat.name + "_prop", property_type="IntegerField", category=cat
             )
+        ItemCategory.objects.create(name="B")
 
-        properties = ItemCategory.objects.get(name="A_1_1").get_properties()
+    def test_filter_relevant_for(self):
+        a_1_1 = ItemCategory.objects.get(name="A_1_1")
+        properties = ItemCategoryProperty.objects.filter_relevant_for(a_1_1)
 
         names = list(prop.name for prop in properties)
         expected = ["A_prop", "A_1_prop", "A_1_1_prop"]
 
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
 
-    def test_get_properties_no_properties(self):
-        properties = ItemCategory.objects.get(name="A_1_1").get_properties()
+    def test_filter_relevant_for_no_properties(self):
+        b = ItemCategory.objects.get(name="B")
+        properties = ItemCategoryProperty.objects.filter_relevant_for(b)
 
         names = list(prop.name for prop in properties)
         expected = []
