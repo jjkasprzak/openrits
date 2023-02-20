@@ -97,7 +97,7 @@ class ItemPropertyValue_ModelTests(TestCase):
             f"Some of supported fields were omitted {fields_to_check}",
         )
 
-    def test_filter_defined_for(self):
+    def test_filter_relevant_for(self):
         thing1 = Item.objects.get(name="a_1_thing")
 
         thing1_values = ItemPropertyValue.objects.filter_relevant_for(thing1)
