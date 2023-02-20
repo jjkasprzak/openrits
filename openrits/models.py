@@ -2,7 +2,7 @@ from django.db import models
 from django.core.validators import RegexValidator
 from django.db.models.functions import Substr, StrIndex, Concat, Chr
 from django.db.models.query import QuerySet
-from django.db.models import Value as V, F
+from django.db.models import Value as V, F, Q, Sum
 import datetime
 
 
@@ -151,6 +151,41 @@ class Item(models.Model):
         ItemCategory, on_delete=models.SET_NULL, null=True, blank=True
     )
 
+    class Manager(models.Manager):
+        def get_available_amount(
+            self, item: "Item", start: datetime.datetime, end: datetime.datetime
+        ) -> int:
+            """
+            Return amount of available item for given time.
+            """
+            if item.amount <= 0:
+                return 0
+
+            coliding_rents = (
+                Rent.objects.filter(start__lte=end, end__gte=start)
+                .filter(rentitem__item=item)
+                .annotate(
+                    amount=Sum(F("rentitem__amount"), filter=Q(rentitem__item=item))
+                )
+            )
+            if not coliding_rents:
+                return item.amount
+
+            points_of_interest = []
+            for rent in coliding_rents:
+                points_of_interest.append((rent.start, rent.amount))
+                points_of_interest.append((rent.end, -rent.amount))
+            points_of_interest = sorted(points_of_interest, key=lambda e: e[0])
+
+            storage_amount = item.amount
+            min_amount = storage_amount
+            for poi in points_of_interest:
+                storage_amount -= poi[1]
+                min_amount = min(min_amount, storage_amount)
+            return min_amount
+
+    objects = Manager()
+
 
 class ItemPropertyValue(PropertyValue):
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
@@ -201,9 +236,10 @@ class CustomerPropertyValue(PropertyValue):
 
 
 class Rent(models.Model):
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True)
     created = models.DateTimeField()
-    start = models.DateField()
-    end = models.DateField()
+    start = models.DateTimeField()
+    end = models.DateTimeField()
     issued = models.DateTimeField(null=True, blank=True)
     returned = models.DateTimeField(null=True, blank=True)
 
@@ -220,7 +256,7 @@ class RentPropertyValue(PropertyValue):
         return self.property.property_type
 
 
-class RentItems(models.Model):
+class RentItem(models.Model):
     amount = models.PositiveIntegerField()
     item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True)
     rent = models.ForeignKey(Rent, on_delete=models.CASCADE)

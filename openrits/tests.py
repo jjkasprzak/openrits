@@ -6,7 +6,10 @@ from .models import (
     ItemPropertyValue,
     ItemCategoryProperty,
     ItemCategory,
+    Rent,
+    RentItem,
 )
+from django.utils import timezone
 import datetime
 
 
@@ -254,3 +257,54 @@ class ItemCategoryProperty_ModelTests(TestCase):
         expected = []
 
         self.assertEqual(names, expected, f"Expected {expected}, but got {names}")
+
+
+class Item_ModelTests(TestCase):
+    def setUp(self):
+        a = ItemCategory.objects.create(name="A")
+        thing1 = Item.objects.create(name="thing1", category=a, amount=8)
+        thing2 = Item.objects.create(name="thing2", category=a, amount=10)
+        now = timezone.now()
+        tdelta = datetime.timedelta
+        surrounding_rent = Rent.objects.create(
+            created=now, start=now, end=now + tdelta(days=4)
+        )
+        left_rent = Rent.objects.create(
+            created=now, start=now, end=now + tdelta(days=2, hours=12)
+        )
+        for _ in range(3):
+            small_left_rent = Rent.objects.create(
+                created=now, start=now, end=now + tdelta(hours=12)
+            )
+        right_rent = Rent.objects.create(
+            created=now, start=now + tdelta(days=1, hours=12), end=now + tdelta(days=4)
+        )
+        middle_rent = Rent.objects.create(
+            created=now,
+            start=now + tdelta(days=1, hours=23),
+            end=now + tdelta(days=2, hours=1),
+        )
+        for rent in Rent.objects.all():
+            for _ in range(2):
+                RentItem.objects.create(item=thing1, rent=rent, amount=1)
+                RentItem.objects.create(item=thing2, rent=rent, amount=1)
+
+    def test_get_available_amount(self):
+        now = timezone.now()
+        tdelta = datetime.timedelta
+        thing1 = Item.objects.get(name="thing1")
+
+        amount = Item.objects.get_available_amount(
+            thing1, now + tdelta(days=1), now + tdelta(days=3)
+        )
+        self.assertEqual(amount, 0)
+
+        amount = Item.objects.get_available_amount(
+            thing1, now + tdelta(hours=11), now + tdelta(days=3)
+        )
+        self.assertEqual(amount, -2)
+
+        amount = Item.objects.get_available_amount(
+            thing1, now + tdelta(days=2, hours=2), now + tdelta(days=3)
+        )
+        self.assertEqual(amount, 2)
