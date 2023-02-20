@@ -136,10 +136,17 @@ class ItemPropertyValue(PropertyValue):
 
     class Manager(models.Manager):
         def get_defined_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+            """
+            Return values for given item and its property definitions.
+            """
             defined_properties = item.category.get_properties().only("id")
             return self.filter(item=item).filter(property__in=defined_properties)
 
-        def get_undefined_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+        def get_obsolete_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+            """
+            Return values for given item that are not related to
+            any of item current property definitions.
+            """
             defined_properties = item.category.get_properties().only("id")
             return self.filter(item=item).exclude(property__in=defined_properties)
 

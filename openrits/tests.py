@@ -17,7 +17,7 @@ class ItemPropertyValue_ModelTests(TestCase):
         a_1_1 = ItemCategory.objects.create(
             name="A_1_1", parent=a_1, lineage=f"{a_1.lineage}{a_1.pk},"
         )
-        ItemCategory.objects.create(name="B")
+        cat_b = ItemCategory.objects.create(name="B")
 
         a_thing = Item.objects.create(name="a_thing", category=a)
         a_1_thing = Item.objects.create(name="a_1_thing", category=a_1)
@@ -31,7 +31,6 @@ class ItemPropertyValue_ModelTests(TestCase):
                 value="2", item=a_1_thing, property=prop_def
             )
 
-        cat_b = ItemCategory.objects.create(name="B")
         b_thing = Item.objects.create(name="b_thing", category=cat_b)
         for field in PropertyDefinition.SUPPORTED_FIELDS:
             prop = ItemCategoryProperty.objects.create(
@@ -107,10 +106,10 @@ class ItemPropertyValue_ModelTests(TestCase):
 
         self.assertEqual(result, expected, f"Expected {expected}, but got {result}")
 
-    def test_get_undefined_for(self):
+    def test_get_obsolete_for(self):
         thing1 = Item.objects.get(name="a_1_thing")
 
-        thing1_values = ItemPropertyValue.objects.get_undefined_for(thing1)
+        thing1_values = ItemPropertyValue.objects.get_obsolete_for(thing1)
         result = list((v.property.name, v.value) for v in thing1_values)
         expected = [("A_1_1_prop", "2")]
 
