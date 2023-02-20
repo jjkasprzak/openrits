@@ -97,19 +97,19 @@ class ItemPropertyValue_ModelTests(TestCase):
             f"Some of supported fields were omitted {fields_to_check}",
         )
 
-    def test_get_defined_for(self):
+    def test_filter_defined_for(self):
         thing1 = Item.objects.get(name="a_1_thing")
 
-        thing1_values = ItemPropertyValue.objects.get_defined_for(thing1)
+        thing1_values = ItemPropertyValue.objects.filter_relevant_for(thing1)
         result = list((v.property.name, v.value) for v in thing1_values)
         expected = [("A_prop", "2"), ("A_1_prop", "2")]
 
         self.assertEqual(result, expected, f"Expected {expected}, but got {result}")
 
-    def test_get_obsolete_for(self):
+    def test_filter_obsolete_for(self):
         thing1 = Item.objects.get(name="a_1_thing")
 
-        thing1_values = ItemPropertyValue.objects.get_obsolete_for(thing1)
+        thing1_values = ItemPropertyValue.objects.filter_obsolete_for(thing1)
         result = list((v.property.name, v.value) for v in thing1_values)
         expected = [("A_1_1_prop", "2")]
 

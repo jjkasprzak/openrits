@@ -157,7 +157,7 @@ class ItemPropertyValue(PropertyValue):
     property = models.ForeignKey(ItemCategoryProperty, on_delete=models.CASCADE)
 
     class Manager(models.Manager):
-        def get_defined_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+        def filter_relevant_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
             """
             Return values for given item and its property definitions.
             """
@@ -166,7 +166,7 @@ class ItemPropertyValue(PropertyValue):
             ).only("id")
             return self.filter(item=item).filter(property__in=defined_properties)
 
-        def get_obsolete_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
+        def filter_obsolete_for(self, item: Item) -> "QuerySet[ItemPropertyValue]":
             """
             Return values for given item that are not related to
             any of item current property definitions.
