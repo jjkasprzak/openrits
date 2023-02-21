@@ -195,10 +195,14 @@ class ItemCategory_ModelTests(TestCase):
 
     def test_update_parent_to_descendant(self):
         a_1 = ItemCategory.objects.get(name="A_1")
-        a_1_1 = ItemCategory.objects.get(name="A_1_1")
         a_1_1_1 = ItemCategory.objects.get(name="A_1_1_1")
         with self.assertRaises(ValueError):
             ItemCategory.objects.update_parent(a_1, a_1_1_1)
+
+    def test_update_parent_to_self(self):
+        a_1 = ItemCategory.objects.get(name="A_1")
+        with self.assertRaises(ValueError):
+            ItemCategory.objects.update_parent(a_1, a_1)
 
     def test_filter_ancestors(self):
         a_1_1 = ItemCategory.objects.get(name="A_1_1")
@@ -285,9 +289,8 @@ class Item_ModelTests(TestCase):
             end=now + tdelta(days=2, hours=1),
         )
         for rent in Rent.objects.all():
-            for _ in range(2):
-                RentItem.objects.create(item=thing1, rent=rent, amount=1)
-                RentItem.objects.create(item=thing2, rent=rent, amount=1)
+            RentItem.objects.create(item=thing1, rent=rent, amount=2)
+            RentItem.objects.create(item=thing2, rent=rent, amount=2)
 
     def test_get_available_amount(self):
         now = timezone.now()

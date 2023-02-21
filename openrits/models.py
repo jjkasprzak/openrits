@@ -98,6 +98,8 @@ class ItemCategory(models.Model):
                 new_lineage = new_parent.lineage + f"{new_parent.pk},"
                 new_parent_id = new_parent.pk
                 check_qs = self.filter_descendants(category).filter(pk=new_parent_id)
+                if new_parent_id == category.pk:
+                    raise ValueError("Category can not reference itself as its parent.")
                 if check_qs:
                     raise ValueError("New category parent must not be its descendant.")
             self.filter(pk=category.pk).update(
@@ -116,6 +118,17 @@ class ItemCategory(models.Model):
             )
 
     objects = Manager()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~Q(parent_id=F("id")), name="id_not_equal_parent"
+            ),
+            models.CheckConstraint(
+                check=~Q(lineage__contains=Concat(V(","), F("id"), V(","))),
+                name="id_not_in_lineage",
+            ),
+        ]
 
 
 class ItemCategoryProperty(PropertyDefinition):
@@ -145,7 +158,7 @@ class ItemCategoryProperty(PropertyDefinition):
 
 class Item(models.Model):
     name = models.CharField(max_length=127)
-    amount = models.PositiveIntegerField(default=0)
+    amount = models.IntegerField(default=0)
     archived = models.BooleanField(default=False)
     category = models.ForeignKey(
         ItemCategory, on_delete=models.SET_NULL, null=True, blank=True
@@ -186,6 +199,11 @@ class Item(models.Model):
 
     objects = Manager()
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(check=Q(amount__gte=0), name="item_amount_gte_0"),
+        ]
+
 
 class ItemPropertyValue(PropertyValue):
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
@@ -216,6 +234,13 @@ class ItemPropertyValue(PropertyValue):
     def getPropertyType(self) -> str:
         return self.property.property_type
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("item", "property"), name="unique_item_property"
+            ),
+        ]
+
 
 class Customer(models.Model):
     name = models.CharField(max_length=127)
@@ -234,6 +259,13 @@ class CustomerPropertyValue(PropertyValue):
     def getPropertyType(self) -> str:
         return self.property.property_type
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("customer", "property"), name="unique_customer_property"
+            ),
+        ]
+
 
 class Rent(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True)
@@ -242,6 +274,21 @@ class Rent(models.Model):
     end = models.DateTimeField()
     issued = models.DateTimeField(null=True, blank=True)
     returned = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(check=Q(start__lte=F("end")), name="start_lte_end"),
+            models.CheckConstraint(
+                check=Q(issued__isnull=True)
+                | Q(returned__isnull=True)
+                | Q(issued__lte=F("returned")),
+                name="issued_lte_returned",
+            ),
+            models.CheckConstraint(
+                check=~Q(Q(issued__isnull=True) & Q(returned__isnull=False)),
+                name="returned_but_not_issued",
+            ),
+        ]
 
 
 class RentProperty(PropertyDefinition):
@@ -255,8 +302,21 @@ class RentPropertyValue(PropertyValue):
     def getPropertyType(self) -> str:
         return self.property.property_type
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("rent", "property"), name="unique_rent_property"
+            )
+        ]
+
 
 class RentItem(models.Model):
-    amount = models.PositiveIntegerField()
+    amount = models.IntegerField()
     item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True)
     rent = models.ForeignKey(Rent, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(check=Q(amount__gt=0), name="rent_amount_gt_0"),
+            models.UniqueConstraint(fields=("item", "rent"), name="unique_item_rent"),
+        ]
